@@ -66,41 +66,45 @@ class OSSIA_EXPORT serial_wrapper final
 {
   W_OBJECT(serial_wrapper)
 
-  QSerialPort mSerialPort;
-
 public:
-  serial_wrapper(const QSerialPortInfo& port) : mSerialPort{port}
+  serial_wrapper(const QSerialPortInfo& port) noexcept
+    : m_port{port}
   {
-    mSerialPort.open(QIODevice::ReadWrite);
-    ossia::logger().info(
-        "Opened serial port: {}", mSerialPort.errorString().toStdString());
+    bool ok = m_port.open(QIODevice::ReadWrite);
+    if(!ok)
+    {
+      ossia::logger().info(
+            "Serial port error: {}", m_port.errorString().toStdString());
+    }
     connect(
         this, &serial_wrapper::write, this, &serial_wrapper::on_write,
         Qt::QueuedConnection);
 
     connect(
-        &mSerialPort, &QSerialPort::readyRead, this, &serial_wrapper::on_read,
+        &m_port, &QSerialPort::readyRead, this, &serial_wrapper::on_read,
         Qt::QueuedConnection);
   }
-  ~serial_wrapper();
 
-public:
+  ~serial_wrapper() noexcept;
+
   void write(QByteArray arg_1) E_SIGNAL(OSSIA_EXPORT, write, arg_1);
-  void read(QByteArray arg_1) E_SIGNAL(OSSIA_EXPORT, read, arg_1);
+  void read(QString txt, QByteArray raw) E_SIGNAL(OSSIA_EXPORT, read, txt, raw);
 
-public:
-  void on_write(QByteArray b)
+  void on_write(QByteArray b) noexcept
   {
-    mSerialPort.write(b);
-  }; W_SLOT(on_write)
+    m_port.write(b);
+  } W_SLOT(on_write)
 
   void on_read()
   {
-    while(mSerialPort.canReadLine())
-    {
-      read(mSerialPort.readLine());
-    }
-  }; W_SLOT(on_read)
+    QByteArray arr = m_port.readAll();
+    QString str = QString::fromLatin1(arr);
+    read(str, arr);
+  } W_SLOT(on_read)
+
+private:
+  QSerialPort m_port;
+
 };
 
 
@@ -129,7 +133,7 @@ public:
   }
 
 private:
-  void on_read(const QByteArray&);
+  void on_read(const QString& txt, const QByteArray&);
   QQmlEngine* m_engine{};
   QQmlComponent* m_component{};
 

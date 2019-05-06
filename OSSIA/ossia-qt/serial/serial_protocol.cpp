@@ -72,13 +72,15 @@ bool serial_protocol::pull(parameter_base&)
   return false;
 }
 
-void serial_protocol::on_read(const QByteArray& a)
+void serial_protocol::on_read(const QString& txt, const QByteArray& a)
 {
   QVariant ret;
   QMetaObject::invokeMethod(
         m_object, "onMessage",
         Q_RETURN_ARG(QVariant, ret),
-        Q_ARG(QVariant, a));
+        Q_ARG(QVariant, txt),
+        Q_ARG(QVariant, a)
+        );
 
   auto arr = ret.value<QJSValue>();
   // should be an array of { address, value } objects
@@ -161,7 +163,6 @@ bool serial_protocol::push(const ossia::net::parameter_base& addr, const ossia::
       throw std::runtime_error("serial_protocol::push: bad type");
   }
 
-  str += '\n';
   qDebug() << str;
   m_serialPort.write(str.toUtf8());
   return false;
