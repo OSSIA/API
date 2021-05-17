@@ -1,0 +1,77 @@
+name: Benchmarks
+
+on: push
+
+jobs:
+  build_benchmark_ubuntu:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        sudo apt update -qq
+        sudo apt install -qq -y build-essential g++ ninja-build wget
+        wget https://github.com/jcelerier/cninja/releases/download/v3.7.2/cninja-v3.7.2-Linux.tar.gz
+        tar xaf cninja-*-Linux.tar.gz
+        rm *.tar.gz
+    - name: Build
+      run: |
+        echo $(variables.gitTag)
+        cd $(System.DefaultWorkingDirectory)
+
+        git clone https://github.com/google/benchmark
+        git clone https://github.com/google/googletest.git benchmark/googletest
+        (
+          cd benchmark/
+          mkdir build
+          cd build/
+          cmake -GNinja .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=inst -DBUILD_SHARED_LIBS=OFF
+          ninja
+          ninja install
+        )
+
+        (
+          ./cninja ${GITHUB_WORKSPACE} static minimal benchmarks -- -DCMAKE_PREFIX_PATH=$PWD/benchmark/build/inst
+          mv build-* build
+        )
+
+    - name: Archive Binary
+      uses: actions/upload-artifact@v2
+      with:
+        name: libossia-device-bench
+        path: build/tests/ossia_DeviceBenchmark
+
+  ubuntu_RunBenchmarks_selfhosted:
+    needs: build_benchmark_ubuntu
+    runs-on: ubuntu-latest
+    steps:
+    # - name: 'Tune System Performance' 
+    #   run: curl http://$(StabilizerServer):7373/acquire # On stabilise la machine
+    - name: Download all workflow run artifacts
+      uses: actions/download-artifact@v2
+    - name: 'Run Benchmarks'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -qq libbenchmark-dev libbenchmark-tools
+        cp -rf libossia-device-bench/* .
+        mkdir results
+        chmod +x ossia_DeviceBenchmark
+        ./ossia_DeviceBenchmark
+      env:
+        BENCHMARK_BENCHMARK_FORMAT: 'json'
+        BENCHMARK_BENCHMARK_OUT: 'results/benchmarks-results.json'
+        BENCHMARK_FORMAT: 'json'
+        BENCHMARK_OUT: 'results/benchmarks-results.json'
+
+    - name: Archive Results
+      uses: actions/upload-artifact@v2
+      with:
+        name: benchResults_selfhosted
+        path: results
+
+    # - name: 'Reset System Performance'
+    #   if: ${{ always() }}
+    #   run: curl http://$(StabilizerServer):7373/release
+      

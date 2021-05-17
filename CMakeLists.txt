@@ -16,14 +16,13 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
   cmake_policy(VERSION 3.18)
 endif()
 
-
 project(ossia C CXX)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE 1)
 find_package(Threads)
 
 if(NOT QT_VERSION)
-  set(QT_VERSION Qt5 5.9)
+  set(QT_VERSION Qt5 5.15.2)
   set(QT_PREFIX Qt5)
 endif()
 find_package(${QT_VERSION} COMPONENTS Core)

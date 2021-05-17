@@ -1,0 +1,99 @@
+name: ossia-max
+
+on: push
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    environment: 'Apple Certificate'
+    steps:
+    - uses: actions/checkout@v2
+    - name: build
+      run: ./tools/build-ossia-max.sh clean silent release
+    - name: Code Signing
+      shell: bash
+      env:
+        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      run: |
+        # Setup codesigning
+        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
+        (
+          set +x
+          KEY_CHAIN=build.keychain
+          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
+
+          security create-keychain -p azure $KEY_CHAIN
+          security default-keychain -s $KEY_CHAIN
+          security unlock-keychain -p azure $KEY_CHAIN
+          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
+          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
+
+          rm -rf *.p12
+        )
+
+        security unlock-keychain -p azure build.keychain
+
+        (
+          cd artifacts
+          codesign --force --timestamp --sign "ossia.io" ossia/support/libossia-max.dylib
+          for mxo in ossia/externals/*.mxo;
+          do 
+            codesign --force --timestamp --sign "ossia.io" $mxo
+          done
+          
+          zip ossia-max.zip ossia
+          xcrun altool \
+                --notarize-app \
+                -t osx \
+                -f "ossia-max.zip" \
+                --primary-bundle-id "io.ossia.ossia-max" \
+                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
+          rm ossia-max.zip
+        )
+    - name: Archive Max Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-max-macos
+        path: artifacts/ossia
+    - name: Upload logs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: logs
+        path: "*.log"
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      APPVEYOR_BUILD_TYPE: max
+      configuration: Release
+    steps:
+    - uses: actions/checkout@v2
+    - name: install deps
+      run: cinst -y ninja
+    - name : build
+      shell: cmd
+      run: |
+        for /f "delims=" %%x in ('vswhere.exe -latest -property InstallationPath') do set VSPATH=%%x
+        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+        echo Workspace: %GITHUB_WORKSPACE%
+        cd %GITHUB_WORKSPACE%
+        mkdir build
+        cd build
+        cmake -GNinja %GITHUB_WORKSPACE% -DOSSIA_MAX_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
+        cmake --build . --target install
+    - name: Archive Max Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-max-windows
+        path: build/install/ossia-max-package/ossia
+    - name: Upload logs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: logs
+        path: "*.log"

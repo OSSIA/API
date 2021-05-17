@@ -1,0 +1,65 @@
+name: Coverage
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        wget -nv https://cmake.org/files/v3.18/cmake-3.18.3-Linux-x86_64.tar.gz -O cmake-linux.tgz &
+
+        echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-10 main' | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 1397BC53640DB551 15CF4D18AF4F7421
+        sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+        sudo add-apt-repository --yes ppa:beineri/opt-qt-5.15.2-focal
+        sudo apt-get update -qq
+        sudo apt-get install -qq --yes --force-yes \
+            g++-9 binutils ninja-build \
+            clang-10 lld-10 \
+            qt515base qt515declarative qt515svg qt515quickcontrols2 qt515websockets qt515serialport \
+            libasound2-dev portaudio19-dev \
+            mesa-common-dev libgl1-mesa-dev \
+            libbluetooth-dev \
+            libavahi-client-dev
+
+        wait wget || true
+
+        tar xaf cmake-linux.tgz
+        mv cmake-*-x86_64 cmake-latest
+
+        sudo gem install coveralls-lcov
+
+        sudo apt-get install -yqq python3 python3-pip
+        sudo pip3 install --upgrade wheel setuptools
+        sudo pip3 install git+https://github.com/rpgillespie6/fastcov.git
+
+        # For some reason gcov seems to be not available anymore...
+        wget -nv https://github.com/ossia/sdk/releases/download/sdk14/gcov
+        file ./gcov
+        chmod +x ./gcov
+        sudo cp ./gcov /usr/bin/gcov
+        sudo cp ./gcov /usr/bin/gcov-9
+
+        gcov-9 --version
+    - name: Build
+      run: |
+        QT_ENV_SCRIPT=$(find /opt -name 'qt*-env.sh')
+        set +e
+        source $QT_ENV_SCRIPT
+        set -e
+        export CMAKE_BIN=$(readlink -f "$(find cmake-latest/bin -name cmake -type f )")
+        ${CMAKE_BIN} -B build -S ${GITHUB_WORKSPACE} \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DOSSIA_TESTING=1 \
+          -DOSSIA_COVERAGE=1 \
+          -DPORTAUDIO_ONLY_DYNAMIC=1 \
+          -DOSSIA_PD=0 \
+          -DOSSIA_QT=1 \
+          -DOSSIA_C=1 
+        ${CMAKE_BIN} --build build -- -j2
+        ${CMAKE_BIN} --build build --target ossia_coverage
+        rm -rf **/*.o
+        coveralls-lcov coverage.info

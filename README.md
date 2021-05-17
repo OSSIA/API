@@ -30,9 +30,18 @@ Documentation
 
 Build Status
 ============
-* Linux, OS X : [![Build Status](https://travis-ci.org/ossia/libossia.svg)](https://travis-ci.org/ossia/libossia)
-* Windows : [![Build status](https://ci.appveyor.com/api/projects/status/ut3o8p64lib3ie1w?svg=true)](https://ci.appveyor.com/project/JeanMichalCelerier/libossia)
-* Max, Java & Unity3D : [![Azure Pipelines](https://img.shields.io/azure-devops/build/ossia/f914424f-63a4-43f7-b424-67c9dc58ae05/1)](https://dev.azure.com/ossia/libossia/_build?definitionId=1)
+* [![Build Status](https://github.com/ossia/libossia/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/benchmarks.yml)
+
+* <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Logo_Max_8_software.jpg/244px-Logo_Max_8_software.jpg" alt="Max" height="20"/> [![Build Status](https://github.com/ossia/libossia/actions/workflows/ossia-max.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/ossia-max.yml)
+
+* <img src="https://patchstorage.com/wp-content/themes/bayside/images/logo-pd-vanilla.png" alt="Pd" height="20"/> [![Build Status](https://github.com/ossia/libossia/actions/workflows/ossia-pd.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/ossia-pd.yml)
+
+* <img src="https://unity3d.com/profiles/unity3d/themes/unity/images/pages/branding_trademarks/unity-tab-square-black.png" alt="Unity3D" height="20"/> [![Build Status](https://github.com/ossia/libossia/actions/workflows/ossia-unity.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/ossia-unity.yml)
+
+* [![Build Status](https://github.com/ossia/libossia/actions/workflows/doc.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/doc.yml)
+
+* [![Build Status](https://github.com/ossia/libossia/actions/workflows/coverage.yml/badge.svg)](https://github.com/ossia/libossia/actions/workflows/coverage.yml)
+
 * Coveralls : [![Coverage Status](https://coveralls.io/repos/github/ossia/libossia/badge.svg?branch=master)](https://coveralls.io/github/ossia/libossia?branch=master)
 
 Latest ci builds are available [here](https://github.com/ossia/libossia/releases/tag/latest-ci-build). But please note that those are only for testing purpose.

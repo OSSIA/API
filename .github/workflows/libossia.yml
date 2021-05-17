@@ -1,0 +1,182 @@
+name: libossia
+
+on: push
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    environment: 'Apple Certificate'
+    strategy:
+      matrix:
+        static: [0, 1]
+        build_type: [Release, Debug]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: brew install ninja
+    - name: Build
+      env: 
+        STATIC: ${{ matrix.static }}
+        BUILD_TYPE: ${{ matrix.build_type }}
+      run: | 
+        cmake -B build -S ${GITHUB_WORKSPACE} -GNinja -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DOSSIA_STATIC=$STATIC -DCMAKE_INSTALL_PREFIX=install
+        cmake --build build
+        cmake --build build --target install
+    - name: Code Signing
+      shell: bash
+      env:
+        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      run: |
+        # Setup codesigning
+        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
+        (
+          set +x
+          KEY_CHAIN=build.keychain
+          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
+
+          security create-keychain -p azure $KEY_CHAIN
+          security default-keychain -s $KEY_CHAIN
+          security unlock-keychain -p azure $KEY_CHAIN
+          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
+          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
+
+          rm -rf *.p12
+        )
+
+        security unlock-keychain -p azure build.keychain
+
+        (
+          cd install
+          find lib \( -name "*.dylib" -o -name "*.a" -o  -name "*.so" \) -exec echo Signing {} + -exec codesign --force --timestamp --sign "ossia.io" {} +
+
+          zip -r ossia-shared-release.zip lib/
+          xcrun altool \
+                --notarize-app \
+                -t osx \
+                -f "ossia-shared-release.zip" \
+                --primary-bundle-id "io.ossia.ossia-shared-release" \
+                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
+          rm ossia-shared-release.zip
+        )
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: libossia-shared-release-macos
+        path: install
+
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        static: [0, 1]
+        build_type: [Release, Debug]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - name: install deps
+      run: cinst -y ninja
+    - name : Build
+      shell: cmd
+      env: 
+        STATIC: ${{ matrix.static }}
+        BUILD_TYPE: ${{ matrix.build_type }}
+      run: |
+        for /f "delims=" %%x in ('vswhere.exe -latest -property InstallationPath') do set VSPATH=%%x
+        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+        echo Workspace: %GITHUB_WORKSPACE%
+        cd %GITHUB_WORKSPACE%
+        mkdir build
+        cd build
+        cmake -GNinja .. -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DOSSIA_STATIC=%STATIC% 
+        cmake --build .
+        cmake --build . --target install
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: libossia-shared-release-windows
+        path: install
+
+  build-linux_x86:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        static: [0, 1]
+        build_type: [Release, Debug]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: | 
+        sudo apt-get update -yqq 
+        sudo apt-get upgrade -yqq
+        sudo apt-get install -yqq build-essential g++ ninja-build libavahi-client-dev
+    - name: Build
+      env: 
+        STATIC: ${{ matrix.static }}
+        BUILD_TYPE: ${{ matrix.build_type }}
+      run: | 
+        cmake -B build -S ${GITHUB_WORKSPACE} -GNinja -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DOSSIA_STATIC=$STATIC 
+        cmake --build build
+        cmake --build build --target install 
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: libossia-shared-release-linux
+        path: install
+
+  build-linux_rpi:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        static: [0, 1]
+        build_type: [Release, Debug]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update -yqq 
+        sudo apt-get upgrade -yqq
+        sudo apt-get install -yqq build-essential g++ ninja-build libavahi-client-dev wget
+
+        wget -nv https://www.dropbox.com/s/lwchd3va49sd43p/gcc-8.2.0-rpi.tar.bz2
+        tar xf gcc-8.2.0-rpi.tar.bz2
+        sudo mv cross-pi-gcc-8.2.0/ /opt/
+        sudo ln -s /opt/cross-pi-gcc-8.2.0 /opt/cross-pi-gcc
+
+        sudo ln -s /usr/include/arm-linux-gnueabihf/sys /usr/include/sys
+        sudo ln -s /usr/include/arm-linux-gnueabihf/bits /usr/include/bits
+        sudo ln -s /usr/include/arm-linux-gnueabihf/gnu /usr/include/gnu
+        sudo ln -s /usr/include/arm-linux-gnueabihf/asm /usr/include/asm
+        sudo ln -s /usr/lib/arm-linux-gnueabihf/crti.o /usr/lib/crti.o
+        sudo ln -s /usr/lib/arm-linux-gnueabihf/crt1.o /usr/lib/crt1.o
+        sudo ln -s /usr/lib/arm-linux-gnueabihf/crtn.o /usr/lib/crtn.o
+    - name: Build
+      env: 
+        STATIC: ${{ matrix.static }}
+        BUILD_TYPE: ${{ matrix.build_type }}
+      run: |
+        export CTEST_OUTPUT_ON_FAILURE=1
+        export RPI_ROOT_PATH=/opt/cross-pi-gcc-8.2.0
+        export PKG_CONFIG_SYSROOT_DIR=$RPI_ROOT_PATH
+        export PKG_CONFIG_LIBDIR=${RPI_ROOT_PATH}/usr/lib/pkgconfig:${RPI_ROOT_PATH}/usr/share/pkgconfig:${RPI_ROOT_PATH}/usr/lib/arm-linux-gnueabihf/pkgconfig/
+        export PATH=/opt/cross-pi-gcc/bin:${PATH}
+        export LD_LIBRARY_PATH=/opt/cross-pi-gcc/lib:${LD_LIBRARY_PATH}
+
+        cmake -B build -S ${GITHUB_WORKSPACE} \
+            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchain/arm-linux-gnueabihf.cmake" \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DOSSIA_STATIC=$STATIC \
+            -DCMAKE_INSTALL_PREFIX=install \
+            -DOSSIA_CI=1
+
+        cmake --build build
+        cmake --build build --target install
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: libossia-shared-release-rpi
+        path: install

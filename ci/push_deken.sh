@@ -21,7 +21,7 @@ if [[ "$BUILD_TYPE" == *Pd* && "$TRAVIS_TAG" != "" ]]; then
     VERSION=git-${TRAVIS_COMMIT:0:7} # get the first 7th char of SHA
   fi
 
-  #Create folder on Webdav may fail if folder already exists
+  # Create folder on Webdav, may fail if folder already exists
   curl --user ossia:${DEKEN_PASSWORD}  -X MKCOL  "https://puredata.info/Members/ossia/software/ossia/${VERSION}/" || true
 
   if [[ "$BUILD_TYPE" == "PdRelease" ]]; then

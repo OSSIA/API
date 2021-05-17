@@ -1,0 +1,181 @@
+name: ossia-unity
+
+on: push
+
+jobs:
+  Unity3DLinux:
+    runs-on: ubuntu-latest
+    name: Unity3D (Linux)
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -yqq build-essential g++ ninja-build libavahi-client-dev
+    - name: Build
+      run: |
+        cmake  -B build -S ${GITHUB_WORKSPACE} -GNinja -DOSSIA_UNITY3D_ONLY=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        cmake --build build --target install 
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-unity-linux
+        path: install
+
+  Unity3DMac:
+    name: Unity3D (macOS)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        brew install ninja
+    - name: Build
+      run: |
+        cmake -B build -S ${GITHUB_WORKSPACE} -GNinja -DOSSIA_UNITY3D_ONLY=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        cmake --build build --target install 
+    - name: Code Signing
+      shell: bash
+      env:
+        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      run: |
+        # Setup codesigning
+        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
+        (
+          set +x
+          KEY_CHAIN=build.keychain
+          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
+
+          security create-keychain -p azure $KEY_CHAIN
+          security default-keychain -s $KEY_CHAIN
+          security unlock-keychain -p azure $KEY_CHAIN
+          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
+          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
+
+          rm -rf *.p12
+        )
+
+        security unlock-keychain -p azure build.keychain
+
+        (
+          cd install
+          codesign --force --timestamp --sign "ossia.io" ossia/Plugins/macos/ossia.dylib
+
+          zip ossia-unity.zip ossia/Plugins/macos/ossia.dylib
+          xcrun altool \
+                --notarize-app \
+                -t osx \
+                -f "ossia-unity.zip" \
+                --primary-bundle-id "io.ossia.ossia-unity" \
+                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
+          rm ossia-unity.zip
+        )
+
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-unity-macos
+        path: install
+    environment: 'Apple Certificate'
+
+  Unity3DIOs:
+    name: Unity3D (iOS)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        brew install ninja
+    - name: Initialize iOS toolchain
+      run: |
+        cd ${GITHUB_WORKSPACE}
+        git submodule update --init 3rdparty/ios-cmake
+    - name: Build
+      run: |
+        export CMAKE_MAKE_PROGRAM=`command -v ninja`
+        echo 'CMAKE_MAKE_PROGRAM $CMAKE_MAKE_PROGRAM'
+        cmake -B build -S ${GITHUB_WORKSPACE} \
+          -GNinja \
+          -DOSSIA_UNITY3D_ONLY=1 \
+          -DCMAKE_INSTALL_PREFIX=install \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/3rdparty/ios-cmake/ios.toolchain.cmake \
+          -DPLATFORM=OS64 \
+          -DENABLE_BITCODE=1 \
+          -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+        cmake --build build
+        cmake --build build --target install
+    - name: Code Signing
+      shell: bash
+      env:
+        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      run: |
+        # Setup codesigning
+        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
+        (
+          set +x
+          KEY_CHAIN=build.keychain
+          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
+
+          security create-keychain -p azure $KEY_CHAIN
+          security default-keychain -s $KEY_CHAIN
+          security unlock-keychain -p azure $KEY_CHAIN
+          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
+          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
+
+          rm -rf *.p12
+        )
+
+        security unlock-keychain -p azure build.keychain
+
+        (
+          cd install
+          codesign --force --timestamp --sign "ossia.io" ossia/Plugins/ios/ossia.a
+
+          zip ossia-unity.zip ossia/Plugins/ios/ossia.a
+          xcrun altool \
+                --notarize-app \
+                -t ios \
+                -f "ossia-unity.zip" \
+                --primary-bundle-id "io.ossia.ossia-unity" \
+                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
+          rm ossia-unity.zip
+        )
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-unity-ios
+        path: install
+    environment: 'Apple Certificate'
+      
+  Unity3DWin32:
+    name: Unity3D (Win32)
+    runs-on: 'windows-latest'
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: cinst -y ninja
+    - name: Build
+      shell: cmd
+      run: |
+        pushd "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
+        for /f "delims=" %%x in ('.\vswhere.exe -latest -property InstallationPath') do set VSPATH=%%x
+        popd
+        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+        cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DCMAKE_CXX_COMPILER="cl.exe" -DCMAKE_C_COMPILER="cl.exe" -DOSSIA_UNITY3D_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        cmake --build build --target install
+    - name: Archive Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: ossia-unity-windows
+        path: install

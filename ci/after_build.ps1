@@ -3,9 +3,11 @@ Set-PSDebug -Trace 1
 function CheckLastExitCode {
     param ([int[]]$SuccessCodes = @(0), [scriptblock]$CleanupScript=$null)
 
-    Push-AppveyorArtifact "$LogFile"
-    Push-AppveyorArtifact "C:/projects/libossia/build/CMakeFiles/CMakeOutput.log"
-    Push-AppveyorArtifact "C:/projects/libossia/build/CMakeFiles/CMakeError.log"
+    if (${env:APPVEYOR}) {
+      Push-AppveyorArtifact "$LogFile"
+      Push-AppveyorArtifact "$repoRoot/build/CMakeFiles/CMakeOutput.log"
+      Push-AppveyorArtifact "$repoRoot/build/CMakeFiles/CMakeError.log"
+    }
 
     if ($SuccessCodes -notcontains $LastExitCode) {
         if ($CleanupScript) {
@@ -19,6 +21,9 @@ CALLSTACK:$(Get-PSCallStack | Out-String)
         throw $msg
     }
 }
+
+$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
+$repoRoot = "$scriptPath\.."
 
 if ( $env:APPVEYOR_BUILD_TYPE -eq "testing" ){
 
